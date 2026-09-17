@@ -43,8 +43,49 @@ export function similarity(a: string, b: string) {
 
 export const PASS = 0.7;
 
+function words(s: string) {
+  return normalize(s).split(" ").filter((w) => w.length > 0);
+}
+
+/** Word stem: enough of the word to catch inflected forms (bunka/bunky/buniek). */
+function stem(w: string) {
+  return w.slice(0, Math.max(3, Math.ceil(w.length * 0.6)));
+}
+
+function stemHit(word: string, target: string) {
+  return word.startsWith(stem(target)) || target.startsWith(stem(word));
+}
+
+/**
+ * Keyword coverage: how many significant answer words are mentioned in the
+ * input, in any word form, anywhere in a sentence. Also reports what's missing.
+ */
+export function keywordCoverage(input: string, answers: string[]) {
+  const inW = words(input);
+  let best = { score: 0, missing: [] as string[] };
+  for (const a of answers) {
+    const aw = words(a).filter((w) => w.length > 2);
+    if (aw.length === 0) {
+      const s = similarity(input, a);
+      if (s > best.score) best = { score: s, missing: [] };
+      continue;
+    }
+    const missing = aw.filter((w) => !inW.some((i) => stemHit(i, w)));
+    const score = 1 - missing.length / aw.length;
+    if (score > best.score) best = { score, missing };
+  }
+  return best;
+}
+
 export function checkText(input: string, answers: string[]) {
-  return Math.max(...answers.map((a) => similarity(input, a)));
+  const sim = Math.max(...answers.map((a) => similarity(input, a)));
+  const cov = keywordCoverage(input, answers).score;
+  return Math.max(sim, cov);
+}
+
+/** Which keywords the input missed (for showing mistakes). */
+export function missingWords(input: string, answers: string[]) {
+  return keywordCoverage(input, answers).missing;
 }
 
 /** Compare a drawing (normalized 0..1 points) to a target shape. */
