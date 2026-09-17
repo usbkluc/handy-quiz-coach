@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { questions, topicById, type Point, type Question } from "@/data/biologia7";
-import { checkDrawing, checkText, PASS } from "@/lib/check";
+import { checkDrawing, checkText, missingWords, PASS } from "@/lib/check";
 import { getProgress, recordAnswer } from "@/lib/store";
 import { DrawPad } from "./DrawPad";
 
@@ -33,7 +33,7 @@ export function Practice({ nick, topicId, onExit }: Props) {
   const [text, setText] = useState("");
   const [choice, setChoice] = useState<number | null>(null);
   const [strokes, setStrokes] = useState<Point[][]>([]);
-  const [result, setResult] = useState<{ ok: boolean; score: number } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; score: number; missing: string[] } | null>(null);
   const [score, setScore] = useState({ ok: 0, total: 0 });
 
   if (pool.length === 0) {
@@ -68,7 +68,9 @@ export function Practice({ nick, topicId, onExit }: Props) {
     if (q.kind === "choice") s = choice === q.correct ? 1 : 0;
     if (q.kind === "draw") s = checkDrawing(strokes, q.shape);
     const ok = s >= PASS;
-    setResult({ ok, score: s });
+    const missing =
+      q.kind === "text" && !ok ? missingWords(text, [q.answer, ...(q.alt ?? [])]) : [];
+    setResult({ ok, score: s, missing });
     setScore((p) => ({ ok: p.ok + (ok ? 1 : 0), total: p.total + 1 }));
     recordAnswer(nick, q.id, ok);
   };
@@ -96,13 +98,14 @@ export function Practice({ nick, topicId, onExit }: Props) {
 
       <div className="mt-4 space-y-3">
         {q.kind === "text" && (
-          <input
+          <textarea
             autoFocus
             value={text}
             disabled={!!result}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !result && text && evaluate()}
-            placeholder="Napíš odpoveď…"
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && !result && text && (e.preventDefault(), evaluate())}
+            placeholder="Napíš odpoveď – môže byť aj celá veta, stačí spomenúť dôležité slová…"
+            rows={3}
             className="w-full rounded-xl border border-border bg-card px-4 py-3 outline-none focus:ring-2 focus:ring-ring"
           />
         )}
@@ -149,7 +152,14 @@ export function Practice({ nick, topicId, onExit }: Props) {
             Zhoda {Math.round(result.score * 100)} % (treba 70 %)
           </p>
           {q.kind === "text" && !result.ok && (
-            <p className="mt-1 text-sm">Správne: {q.answer}</p>
+            <>
+              {result.missing.length > 0 && (
+                <p className="mt-1 text-sm font-medium text-destructive">
+                  Chýbalo: {result.missing.join(", ")}
+                </p>
+              )}
+              <p className="mt-1 text-sm">Správne: {q.answer}</p>
+            </>
           )}
           {q.kind === "choice" && !result.ok && (
             <p className="mt-1 text-sm">Správne: {q.options[q.correct]}</p>
